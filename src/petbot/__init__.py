@@ -5,3 +5,7 @@
 """
 
 __version__ = "0.1.0"
+
+
+class PetBotError(Exception):
+    """可预期的运行错误；入口捕获后输出简洁中文提示，不打印堆栈。"""

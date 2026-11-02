@@ -78,13 +78,15 @@ python -m pip install -e ".[test]"
 
 ## 运行
 
-第一阶段完成后，入口为：
+阶段 2 已接通摄像头、人和猫的 YOLO 检测以及调试窗口。准备权重后运行：
 
 ```powershell
 python -m petbot.main
 ```
 
-模型权重放在 `models/` 下，路径由 `config/default.yaml` 指定。权重体积大且不应进入版本库，`models/*` 已在 `.gitignore` 中排除，仅保留 `models/.gitkeep`。
+程序会自动探测摄像头，打开 `PetBot - Vision Debug` 窗口并叠加检测框；关闭窗口或按 Esc 即正常退出。当前尚未接入表情窗口，阶段 4 会加入。
+
+权重不进入仓库：把 `yolo11n.pt` 放进 `models/` 即可，默认路径是 `models/yolo11n.pt`，也可以在 `config/default.yaml` 的 `detector.model_path` 中修改。没有可用摄像头时，程序会打印“未找到可用摄像头”和尝试过的索引，退出码为 1，不会静默失败。
 
 ## 配置
 
@@ -106,7 +108,7 @@ python -m petbot.main
 ## 里程碑
 
 - [x] 阶段 1：仓库骨架、README、依赖与默认配置
-- [ ] 阶段 2：摄像头采集、YOLO 检测与调试窗口
+- [x] 阶段 2：摄像头采集、YOLO 检测与调试窗口
 - [ ] 阶段 3：方位角、距离估算与状态机
 - [ ] 阶段 4：表情渲染与眼睛行为
 - [ ] 阶段 5：串口协议、dry-run 与单元测试

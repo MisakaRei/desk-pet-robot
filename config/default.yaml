@@ -4,8 +4,9 @@
 # 本阶段在 PC 上验证，后续迁移 Linux ARM 时只改配置和硬件访问层。
 
 camera:
-  # null 表示从 0 开始自动探测；需要固定设备时再填具体索引
+  # null 表示自动探测；需要固定设备时再填具体索引
   preferred_index: null
+  # 自动探测范围包含 0 和 probe_max_index 本身
   probe_max_index: 4
   width: 1280
   height: 720
@@ -56,6 +57,21 @@ face:
     blink_min_interval_s: 2.0
     blink_max_interval_s: 6.0
     blink_duration_s: 0.16
+
+ui:
+  debug_window:
+    # 先用英文标题，避免 OpenCV 在高 DPI Windows 下对中文窗口名编码不稳定
+    title: "PetBot - Vision Debug"
+    # waitKey 的等待时间决定窗口响应速度；1ms 足够刷新又不拖慢采集
+    wait_key_ms: 1
+    box_thickness: 2
+    font_scale: 0.6
+    font_thickness: 1
+    label_padding_px: 6
+    # OpenCV 使用 BGR 顺序，不是 RGB
+    person_color_bgr: [80, 220, 120]
+    cat_color_bgr: [80, 180, 255]
+    text_color_bgr: [255, 255, 255]
 
 serial:
   # 默认无硬件调试，只打印帧；接上真设备后改为 false
