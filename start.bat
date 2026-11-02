@@ -1,5 +1,4 @@
 @echo off
-REM 作者：敕仞
 setlocal
 title Desk Pet Robot
 cd /d "%~dp0"
