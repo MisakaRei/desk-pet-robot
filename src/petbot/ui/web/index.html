@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- 作者：敕仞 -->
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -120,6 +121,23 @@
         </div>
       </section>
 
+      <section class="panel face-panel">
+        <header class="panel-head">
+          <div>
+            <span class="eyebrow">FACE / AFFECT</span>
+            <h2>表情窗口</h2>
+          </div>
+          <span class="tiny-note">240 × 280</span>
+        </header>
+        <div class="face-stage">
+          <img id="faceStream" src="/face.mjpg" alt="表情窗口实时预览">
+        </div>
+        <footer class="panel-foot face-foot">
+          <span>情绪 <b id="faceEmotion">平静</b></span>
+          <span>追视 / 随机眨眼</span>
+        </footer>
+      </section>
+
       <section class="panel sim-panel">
         <header class="panel-head">
           <div>
@@ -178,7 +196,7 @@
         </div>
         <div class="hex-label">最近一帧</div>
         <pre id="lastFrame" class="hex-frame">尚无串口帧
-串口协议与 dry-run 在阶段 5 接入。</pre>
+等待控制周期…</pre>
       </section>
     </main>
 

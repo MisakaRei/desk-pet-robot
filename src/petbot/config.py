@@ -71,6 +71,49 @@ class BrainConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class EyeConfig:
+    spacing_px: int
+    radius_px: int
+    pupil_radius_px: int
+    max_look_offset_px: int
+    follow_smoothing: float
+    blink_min_interval_s: float
+    blink_max_interval_s: float
+    blink_duration_s: float
+    gaze_range_deg: float
+
+
+@dataclass(frozen=True, slots=True)
+class SerialPortId:
+    vid: int
+    pid: int
+
+
+@dataclass(frozen=True, slots=True)
+class SerialConfig:
+    dry_run: bool
+    baudrate: int
+    write_timeout_s: float
+    read_timeout_s: float
+    send_period_s: float
+    status_period_s: float
+    vid_pid_candidates: tuple[SerialPortId, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class FaceConfig:
+    title: str
+    width: int
+    height: int
+    fps: int
+    background_rgb: tuple[int, int, int]
+    eye_rgb: tuple[int, int, int]
+    pupil_rgb: tuple[int, int, int]
+    accent_rgb: tuple[int, int, int]
+    eye: EyeConfig
+
+
+@dataclass(frozen=True, slots=True)
 class DebugWindowConfig:
     title: str
     wait_key_ms: int
@@ -108,6 +151,8 @@ class AppConfig:
     detector: DetectorConfig
     tracking: TrackingConfig
     brain: BrainConfig
+    face: FaceConfig
+    serial: SerialConfig
     ui: UiConfig
 
 
@@ -131,6 +176,8 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     detector = _parse_detector(_as_section(raw, "detector"))
     tracking = _parse_tracking(_as_section(raw, "tracking"))
     brain = _parse_brain(_as_section(raw, "brain"))
+    face = _parse_face(_as_section(raw, "face"))
+    serial = _parse_serial(_as_section(raw, "serial"))
     ui = _parse_ui(_as_section(raw, "ui"))
 
     return AppConfig(
@@ -138,6 +185,8 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         detector=detector,
         tracking=tracking,
         brain=brain,
+        face=face,
+        serial=serial,
         ui=ui,
     )
 
@@ -331,6 +380,166 @@ def _parse_brain(section: Mapping[str, Any]) -> BrainConfig:
             minimum=0.0,
             maximum=90.0,
         ),
+    )
+
+
+def _parse_face(section: Mapping[str, Any]) -> FaceConfig:
+    eye_raw = _as_mapping(_field(section, "face", "eye"), "face.eye")
+    blink_min = _as_float(
+        _field(eye_raw, "face.eye", "blink_min_interval_s"),
+        "face.eye.blink_min_interval_s",
+        minimum=0.1,
+    )
+    blink_max = _as_float(
+        _field(eye_raw, "face.eye", "blink_max_interval_s"),
+        "face.eye.blink_max_interval_s",
+        minimum=0.1,
+    )
+    if blink_min > blink_max:
+        raise ConfigError(
+            "face.eye.blink_min_interval_s 不能大于 blink_max_interval_s"
+        )
+
+    radius = _as_int(
+        _field(eye_raw, "face.eye", "radius_px"),
+        "face.eye.radius_px",
+        minimum=1,
+    )
+    pupil_radius = _as_int(
+        _field(eye_raw, "face.eye", "pupil_radius_px"),
+        "face.eye.pupil_radius_px",
+        minimum=1,
+    )
+    look_offset = _as_int(
+        _field(eye_raw, "face.eye", "max_look_offset_px"),
+        "face.eye.max_look_offset_px",
+        minimum=0,
+    )
+    if pupil_radius + look_offset >= radius:
+        raise ConfigError(
+            "face.eye.pupil_radius_px + max_look_offset_px 必须小于 radius_px，"
+            "否则追视时瞳孔会跑出眼白"
+        )
+
+    return FaceConfig(
+        title=_as_str(_field(section, "face", "title"), "face.title"),
+        width=_as_int(_field(section, "face", "width"), "face.width", minimum=80),
+        height=_as_int(
+            _field(section, "face", "height"), "face.height", minimum=80
+        ),
+        fps=_as_int(
+            _field(section, "face", "fps"),
+            "face.fps",
+            minimum=1,
+            maximum=120,
+        ),
+        background_rgb=_as_color(
+            _field(section, "face", "background_rgb"), "face.background_rgb"
+        ),
+        eye_rgb=_as_color(_field(section, "face", "eye_rgb"), "face.eye_rgb"),
+        pupil_rgb=_as_color(
+            _field(section, "face", "pupil_rgb"), "face.pupil_rgb"
+        ),
+        accent_rgb=_as_color(
+            _field(section, "face", "accent_rgb"), "face.accent_rgb"
+        ),
+        eye=EyeConfig(
+            spacing_px=_as_int(
+                _field(eye_raw, "face.eye", "spacing_px"),
+                "face.eye.spacing_px",
+                minimum=1,
+            ),
+            radius_px=radius,
+            pupil_radius_px=pupil_radius,
+            max_look_offset_px=look_offset,
+            follow_smoothing=_as_float(
+                _field(eye_raw, "face.eye", "follow_smoothing"),
+                "face.eye.follow_smoothing",
+                minimum=0.0,
+                maximum=1.0,
+            ),
+            blink_min_interval_s=blink_min,
+            blink_max_interval_s=blink_max,
+            blink_duration_s=_as_float(
+                _field(eye_raw, "face.eye", "blink_duration_s"),
+                "face.eye.blink_duration_s",
+                minimum=0.02,
+            ),
+            gaze_range_deg=_as_float(
+                _field(eye_raw, "face.eye", "gaze_range_deg"),
+                "face.eye.gaze_range_deg",
+                minimum=1.0,
+                maximum=90.0,
+            ),
+        ),
+    )
+
+
+def _parse_serial(section: Mapping[str, Any]) -> SerialConfig:
+    candidates_raw = _field(section, "serial", "vid_pid_candidates")
+    if not isinstance(candidates_raw, (list, tuple)) or not candidates_raw:
+        raise ConfigError("serial.vid_pid_candidates 必须是非空数组")
+
+    candidates: list[SerialPortId] = []
+    for index, candidate in enumerate(candidates_raw):
+        candidate_map = _as_mapping(
+            candidate, f"serial.vid_pid_candidates[{index}]"
+        )
+        candidates.append(
+            SerialPortId(
+                vid=_as_int(
+                    _field(
+                        candidate_map,
+                        f"serial.vid_pid_candidates[{index}]",
+                        "vid",
+                    ),
+                    f"serial.vid_pid_candidates[{index}].vid",
+                    minimum=0,
+                    maximum=0xFFFF,
+                ),
+                pid=_as_int(
+                    _field(
+                        candidate_map,
+                        f"serial.vid_pid_candidates[{index}]",
+                        "pid",
+                    ),
+                    f"serial.vid_pid_candidates[{index}].pid",
+                    minimum=0,
+                    maximum=0xFFFF,
+                ),
+            )
+        )
+
+    return SerialConfig(
+        dry_run=_as_bool(
+            _field(section, "serial", "dry_run"), "serial.dry_run"
+        ),
+        baudrate=_as_int(
+            _field(section, "serial", "baudrate"),
+            "serial.baudrate",
+            minimum=1,
+        ),
+        write_timeout_s=_as_float(
+            _field(section, "serial", "write_timeout_s"),
+            "serial.write_timeout_s",
+            minimum=0.0,
+        ),
+        read_timeout_s=_as_float(
+            _field(section, "serial", "read_timeout_s"),
+            "serial.read_timeout_s",
+            minimum=0.0,
+        ),
+        send_period_s=_as_float(
+            _field(section, "serial", "send_period_s"),
+            "serial.send_period_s",
+            minimum=0.02,
+        ),
+        status_period_s=_as_float(
+            _field(section, "serial", "status_period_s"),
+            "serial.status_period_s",
+            minimum=0.05,
+        ),
+        vid_pid_candidates=tuple(candidates),
     )
 
 

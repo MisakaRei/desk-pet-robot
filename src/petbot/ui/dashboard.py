@@ -55,6 +55,8 @@ class DashboardState:
         self._next_log_id = 1
         self._frame: np.ndarray | None = None
         self._frame_seq = 0
+        self._face_frame: np.ndarray | None = None
+        self._face_seq = 0
         self._shutdown = threading.Event()
         self._status: dict[str, Any] = {
             "app": {
@@ -82,6 +84,7 @@ class DashboardState:
                 "state": "IDLE",
                 "since": None,
                 "target": None,
+                "emotion": "calm",
             },
             "serial": {
                 "available": False,
@@ -149,6 +152,7 @@ class DashboardState:
         state: str,
         *,
         target: Detection | None = None,
+        emotion: str = "calm",
         available: bool = True,
     ) -> None:
         with self._lock:
@@ -159,6 +163,7 @@ class DashboardState:
                 "target": (
                     None if target is None else _detection_payload(target)
                 ),
+                "emotion": emotion,
             }
 
     def update_serial(
@@ -214,6 +219,16 @@ class DashboardState:
     def latest_frame(self) -> tuple[int, np.ndarray | None]:
         with self._lock:
             return self._frame_seq, self._frame
+
+    def publish_face(self, frame: np.ndarray) -> None:
+        """发布表情窗口的 BGR 快照，供页面独立取流。"""
+        with self._lock:
+            self._face_frame = frame
+            self._face_seq += 1
+
+    def latest_face(self) -> tuple[int, np.ndarray | None]:
+        with self._lock:
+            return self._face_seq, self._face_frame
 
     def request_shutdown(self) -> None:
         with self._lock:
@@ -378,6 +393,9 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         if path == "/stream.mjpg":
             self._serve_mjpeg()
             return
+        if path == "/face.mjpg":
+            self._serve_face_mjpeg()
+            return
         if path == "/favicon.ico":
             self.send_response(HTTPStatus.NO_CONTENT)
             self.end_headers()
@@ -474,6 +492,44 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
             # 浏览器刷新或关闭页面会主动断开 MJPEG 长连接，这是正常现象。
             pass
 
+    def _serve_face_mjpeg(self) -> None:
+        state = self._state
+        config = self._config
+        delay = 1.0 / config.stream_fps
+        last_seq = -1
+        placeholder_sent = False
+
+        self.send_response(HTTPStatus.OK)
+        self.send_header(
+            "Content-Type",
+            f"multipart/x-mixed-replace; boundary={MJPEG_BOUNDARY}",
+        )
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Connection", "close")
+        self.end_headers()
+
+        try:
+            while not state.shutdown_requested:
+                seq, frame = state.latest_face()
+                if frame is None:
+                    if not placeholder_sent:
+                        self._write_jpeg(_make_face_placeholder(), config)
+                        placeholder_sent = True
+                    time.sleep(delay)
+                    continue
+
+                if seq == last_seq:
+                    time.sleep(delay)
+                    continue
+
+                last_seq = seq
+                self._write_jpeg(frame, config)
+                time.sleep(delay)
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            # 页面刷新会主动断开脸部的长连接，和主画面一样按正常退出处理。
+            pass
+
     def _write_jpeg(self, frame: np.ndarray, config: DashboardConfig) -> None:
         ok, encoded = cv2.imencode(
             ".jpg",
@@ -516,6 +572,28 @@ def _parse_after(query: dict[str, list[str]]) -> int:
         return max(0, int(values[0]))
     except (TypeError, ValueError):
         return 0
+
+
+def _make_face_placeholder() -> np.ndarray:
+    width, height = 240, 280
+    frame = np.full((height, width, 3), (10, 17, 22), dtype=np.uint8)
+    label = "FACE OFFLINE"
+    scale = 0.55
+    thickness = 1
+    (text_width, text_height), _ = cv2.getTextSize(
+        label, cv2.FONT_HERSHEY_SIMPLEX, scale, thickness
+    )
+    cv2.putText(
+        frame,
+        label,
+        ((width - text_width) // 2, (height + text_height) // 2),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        scale,
+        (92, 116, 128),
+        thickness,
+        cv2.LINE_AA,
+    )
+    return frame
 
 
 def _make_placeholder(width: int) -> np.ndarray:

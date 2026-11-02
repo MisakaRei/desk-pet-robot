@@ -56,9 +56,15 @@ brain:
   gimbal_limit_deg: 60.0
 
 face:
+  title: "PetBot - Face"
   width: 240
   height: 280
   fps: 30
+  # pygame 使用 RGB；这里不是调试窗口的 BGR
+  background_rgb: [8, 14, 19]
+  eye_rgb: [237, 247, 243]
+  pupil_rgb: [10, 23, 28]
+  accent_rgb: [93, 225, 193]
   eye:
     spacing_px: 86
     radius_px: 38
@@ -68,6 +74,8 @@ face:
     blink_min_interval_s: 2.0
     blink_max_interval_s: 6.0
     blink_duration_s: 0.16
+    # 目标方位角到这个角度时，瞳孔到达最大偏移，再大的角度保持贴边
+    gaze_range_deg: 45.0
 
 ui:
   dashboard:
@@ -103,6 +111,8 @@ serial:
   baudrate: 115200
   write_timeout_s: 0.05
   read_timeout_s: 0.05
+  # 控制帧发送周期；阶段 1 无硬件，2Hz 足够看清 dry-run，接实物后可提高
+  send_period_s: 0.50
   # 不写死 COM 号；按 VID/PID 顺序匹配常见的 ESP32 原生 USB 与 USB 转串口芯片。
   # 硬件确定后可按实际值替换或调整顺序。
   vid_pid_candidates:

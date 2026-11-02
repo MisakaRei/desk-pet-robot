@@ -1,3 +1,4 @@
+// 作者：敕仞
 (() => {
   "use strict";
 
@@ -8,6 +9,11 @@
     WATCH: "注视目标",
     APPROACH: "靠近目标",
     BACKOFF: "后退避让",
+  };
+  const EMOTION_LABELS = {
+    calm: "平静",
+    curious: "好奇",
+    happy: "开心",
   };
 
   const byId = (id) => document.getElementById(id);
@@ -49,6 +55,7 @@
     targetConfidence: byId("targetConfidence"),
     targetBearing: byId("targetBearing"),
     targetDistance: byId("targetDistance"),
+    faceEmotion: byId("faceEmotion"),
     demoToggle: byId("demoToggle"),
     demoBadge: byId("demoBadge"),
     simCanvas: byId("simCanvas"),
@@ -238,6 +245,10 @@
     setText(ui.targetConfidence, target ? formatNumber(target.conf, 2) : "—");
     setText(ui.targetBearing, target ? formatNumber(target.bearing_deg, 1, "°") : "—");
     setText(ui.targetDistance, target ? formatNumber(target.distance_m, 2, " m") : "—");
+    setText(
+      ui.faceEmotion,
+      EMOTION_LABELS[behavior.emotion] || "平静",
+    );
 
     for (const chip of ui.stateChips) {
       chip.classList.toggle("active", chip.dataset.state === state);
@@ -292,7 +303,7 @@
     if (serial.last_hex) {
       setText(ui.lastFrame, serial.last_hex);
     } else {
-      setText(ui.lastFrame, "尚无串口帧\n串口协议与 dry-run 在阶段 5 接入。");
+      setText(ui.lastFrame, "尚无串口帧\n等待控制周期…");
     }
   }
 

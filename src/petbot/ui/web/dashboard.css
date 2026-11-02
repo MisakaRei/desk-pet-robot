@@ -1,3 +1,4 @@
+/* 作者：敕仞 */
 :root {
   color-scheme: dark;
   --bg: #070c11;
@@ -310,11 +311,10 @@ h1 {
 
 .dashboard {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.78fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr) minmax(255px, 0.55fr);
   grid-template-areas:
-    "vision state"
-    "vision simulation"
-    "logs comm";
+    "vision state face"
+    "logs simulation comm";
   gap: 16px;
   align-items: stretch;
 }
@@ -334,6 +334,7 @@ h1 {
   flex-direction: column;
 }
 .state-panel { grid-area: state; }
+.face-panel { grid-area: face; display: flex; flex-direction: column; }
 .sim-panel { grid-area: simulation; }
 .logs { grid-area: logs; display: flex; flex-direction: column; }
 .comm-panel { grid-area: comm; }
@@ -408,7 +409,7 @@ h2 {
   position: relative;
   flex: 1;
   width: 100%;
-  min-height: 370px;
+  min-height: 330px;
   background:
     radial-gradient(circle at 50% 45%, rgba(31, 73, 78, 0.16), transparent 65%),
     #060b10;
@@ -639,6 +640,37 @@ h2 {
   font-weight: 500;
 }
 
+.face-panel {
+  min-height: 0;
+}
+
+.face-stage {
+  flex: 1;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(93, 225, 193, 0.07), transparent 55%),
+    #070c11;
+}
+
+.face-stage img {
+  display: block;
+  width: min(100%, 240px);
+  aspect-ratio: 240 / 280;
+  object-fit: contain;
+  border: 1px solid rgba(93, 225, 193, 0.16);
+  border-radius: 14px;
+  background: #080e12;
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.3);
+}
+
+.face-foot {
+  justify-content: space-between;
+}
+
 .sim-panel {
   display: flex;
   flex-direction: column;
@@ -854,6 +886,7 @@ h2 {
     grid-template-areas:
       "vision"
       "state"
+      "face"
       "simulation"
       "logs"
       "comm";

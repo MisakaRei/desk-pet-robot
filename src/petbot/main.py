@@ -1,7 +1,7 @@
-"""程序入口：组装配置、视觉链路、状态机和 Web 调试控制台。
+"""程序入口：组装配置、视觉链路、状态机、表情窗口和调试控制台。
 
-第一阶段把采集/检测、跟踪、状态决策、浏览器可视化与生命周期放在同一个
-进程里。表情窗口和串口会在后续里程碑接入，入口继续复用这里的启动和清理顺序。
+第一阶段把采集/检测、跟踪、状态决策、表情表现、串口指令与浏览器可视化
+放在同一个进程里；所有硬件交互都从配置和协议层进入，方便之后拆到三块板。
 作者：敕仞
 """
 
@@ -11,10 +11,23 @@ import logging
 import time
 
 from petbot import PetBotError
-from petbot.brain.behaviors import build_behavior
-from petbot.brain.state_machine import StateMachine, select_primary_target
+from petbot.brain.behaviors import BehaviorCommand, build_behavior
+from petbot.brain.state_machine import (
+    PetState,
+    StateMachine,
+    select_primary_target,
+)
+from petbot.comm.protocol import (
+    MessageType,
+    encode_emotion,
+    encode_frame,
+    encode_gimbal,
+    encode_velocity,
+)
+from petbot.comm.serial_link import PacketLink, create_link
 from petbot.config import AppConfig, DEFAULT_CONFIG_PATH, load_config
-from petbot.ui.dashboard import Dashboard
+from petbot.face.renderer import FaceError, FaceWindow
+from petbot.ui.dashboard import Dashboard, DashboardState
 from petbot.ui.debug_window import DebugWindow
 from petbot.vision.camera import Camera, CameraError
 from petbot.vision.detector import Detector, DetectorError
@@ -64,7 +77,7 @@ def main() -> int:
                 "点击右上角“停止服务”或按 Ctrl+C 退出。"
             )
             try:
-                dashboard.wait_for_shutdown()
+                _run_idle_face_preview(config, dashboard)
             except KeyboardInterrupt:
                 LOGGER.info("收到中断，退出。")
             return 1
@@ -101,6 +114,7 @@ def _run(config: AppConfig, dashboard: Dashboard | None) -> int:
             height=camera.height,
         )
 
+    link: PacketLink | None = None
     try:
         try:
             detector = Detector(config.detector)
@@ -124,9 +138,14 @@ def _run(config: AppConfig, dashboard: Dashboard | None) -> int:
 
         tracker = Tracker(config.tracking)
         state_machine = StateMachine(config.brain)
+        link = _open_link(config, state)
+        serial_sequence = 0
+        last_serial_send = 0.0
 
-        with DebugWindow(config.ui.debug_window) as window:
-            LOGGER.info("视觉链路已启动；关闭调试窗口或按 Esc 退出。")
+        with DebugWindow(config.ui.debug_window) as window, FaceWindow(
+            config.face
+        ) as face:
+            LOGGER.info("视觉链路与表情窗口已启动；关闭任一窗口或按 Esc 退出。")
             while True:
                 if state is not None and state.shutdown_requested:
                     LOGGER.info("收到调试控制台的停止请求，退出。")
@@ -157,13 +176,35 @@ def _run(config: AppConfig, dashboard: Dashboard | None) -> int:
                     state_machine.last_target,
                     config.brain,
                 )
+                if (
+                    link is not None
+                    and now - last_serial_send >= config.serial.send_period_s
+                ):
+                    serial_sequence = _send_behavior_frames(
+                        link, behavior, serial_sequence
+                    )
+                    last_serial_send = now
+                    if state is not None:
+                        state.update_serial(
+                            available=True,
+                            dry_run=config.serial.dry_run,
+                            sent=link.sent_count,
+                            last_hex=link.last_frame_hex,
+                        )
+
                 rendered = window.render(frame, tracked)
+
+                if not face.update(behavior, now):
+                    LOGGER.info("表情窗口已关闭或按下 Esc，退出。")
+                    break
 
                 if state is not None:
                     state.publish_frame(rendered, tracked)
+                    state.publish_face(face.snapshot_bgr())
                     state.update_behavior(
                         current_state.value,
                         target=behavior.target,
+                        emotion=behavior.emotion,
                         available=True,
                     )
 
@@ -171,9 +212,110 @@ def _run(config: AppConfig, dashboard: Dashboard | None) -> int:
                     LOGGER.info("调试窗口已关闭或按下 Esc，退出。")
                     break
     finally:
+        if link is not None:
+            link.close()
         camera.release()
 
     return 0
+
+
+def _run_idle_face_preview(config: AppConfig, dashboard: Dashboard) -> None:
+    """摄像头不可用时仍让页面能看到表情窗口，而不是停在黑屏。
+
+    这只是待机表情预览：不会产生目标、不会驱动底盘。关闭表情窗口、
+    点击页面“停止服务”或 Ctrl+C 都可以结束。
+    """
+    idle = build_behavior(PetState.IDLE, None, config.brain)
+    try:
+        face = FaceWindow(config.face)
+    except FaceError as exc:
+        LOGGER.warning("%s；仅保留调试控制台。", exc)
+        dashboard.wait_for_shutdown()
+        return
+
+    LOGGER.info("视觉链路未就绪，启动表情待机预览。")
+    state = dashboard.state
+    link = _open_link(config, state)
+    serial_sequence = 0
+    last_serial_send = 0.0
+    interval = 1.0 / config.face.fps
+    try:
+        while not state.shutdown_requested:
+            started = time.monotonic()
+            if not face.update(idle, started):
+                LOGGER.info("表情窗口已关闭，退出。")
+                break
+            state.publish_face(face.snapshot_bgr())
+
+            if (
+                link is not None
+                and started - last_serial_send >= config.serial.send_period_s
+            ):
+                serial_sequence = _send_behavior_frames(
+                    link, idle, serial_sequence
+                )
+                last_serial_send = started
+                state.update_serial(
+                    available=True,
+                    dry_run=config.serial.dry_run,
+                    sent=link.sent_count,
+                    last_hex=link.last_frame_hex,
+                )
+
+            elapsed = time.monotonic() - started
+            time.sleep(max(0.0, interval - elapsed))
+    finally:
+        if link is not None:
+            link.close()
+        face.close()
+
+
+def _open_link(config: AppConfig, state: DashboardState | None) -> PacketLink | None:
+    try:
+        link = create_link(config.serial)
+    except PetBotError as exc:
+        LOGGER.error("串口初始化失败，继续运行但不发送链路帧：%s", exc)
+        return None
+
+    if state is not None:
+        state.update_serial(
+            available=True,
+            dry_run=config.serial.dry_run,
+            sent=link.sent_count,
+            last_hex=link.last_frame_hex,
+        )
+    return link
+
+
+def _send_behavior_frames(
+    link: PacketLink,
+    behavior: BehaviorCommand,
+    sequence: int,
+) -> int:
+    """一次控制周期发送底盘、云台、表情三帧；返回下一个序号。"""
+    frames = (
+        (
+            MessageType.BASE_VELOCITY,
+            encode_velocity(behavior.linear_mps, behavior.angular_radps),
+        ),
+        (
+            MessageType.GIMBAL_ANGLE,
+            encode_gimbal(
+                behavior.gimbal_yaw_deg,
+                behavior.gimbal_pitch_deg,
+            ),
+        ),
+        (
+            MessageType.EMOTION,
+            encode_emotion(behavior.emotion),
+        ),
+    )
+    encoded = [
+        encode_frame(message_type, (sequence + index) & 0xFFFF, payload)
+        for index, (message_type, payload) in enumerate(frames)
+    ]
+    link.send_many(encoded)
+    return (sequence + len(frames)) & 0xFFFF
 
 
 if __name__ == "__main__":

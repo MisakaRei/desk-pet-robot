@@ -1,4 +1,5 @@
 @echo off
+REM 作者：敕仞
 setlocal
 title Desk Pet Robot
 cd /d "%~dp0"
@@ -12,6 +13,7 @@ if not exist "%PYTHON%" (
         python -m venv .venv
     ) else (
         py -3.12 -m venv .venv
+        if errorlevel 1 py -3.11 -m venv .venv
     )
     if errorlevel 1 goto :error
 )
