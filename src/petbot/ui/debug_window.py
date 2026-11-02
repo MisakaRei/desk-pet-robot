@@ -66,12 +66,16 @@ class DebugWindow:
         return canvas
 
     def show(self, frame: np.ndarray, detections: Sequence[Detection]) -> bool:
-        """显示一帧；返回 False 表示用户关闭了窗口或按了 Esc。"""
+        """渲染并显示一帧；返回 False 表示用户关闭了窗口或按了 Esc。"""
+        return self.show_rendered(self.render(frame, detections))
+
+    def show_rendered(self, frame: np.ndarray) -> bool:
+        """显示已经画好框的帧；主入口也可以把它同步给浏览器调试台。"""
         if not self._window_visible():
             self._open = False
             return False
 
-        cv2.imshow(self._config.title, self.render(frame, detections))
+        cv2.imshow(self._config.title, frame)
         key = cv2.waitKey(self._config.wait_key_ms) & 0xFF
         if key == ESC_KEY:
             self._open = False

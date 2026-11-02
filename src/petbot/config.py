@@ -61,7 +61,21 @@ class DebugWindowConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class DashboardConfig:
+    enabled: bool
+    host: str
+    port: int
+    auto_open_browser: bool
+    keep_alive_on_error: bool
+    stream_fps: int
+    jpeg_quality: int
+    max_stream_width: int
+    log_history: int
+
+
+@dataclass(frozen=True, slots=True)
 class UiConfig:
+    dashboard: DashboardConfig
     debug_window: DebugWindowConfig
 
 
@@ -169,8 +183,61 @@ def _parse_detector(section: Mapping[str, Any]) -> DetectorConfig:
 
 
 def _parse_ui(section: Mapping[str, Any]) -> UiConfig:
+    dashboard_raw = _as_mapping(
+        _field(section, "ui", "dashboard"), "ui.dashboard"
+    )
+    dashboard = DashboardConfig(
+        enabled=_as_bool(
+            _field(dashboard_raw, "ui.dashboard", "enabled"),
+            "ui.dashboard.enabled",
+        ),
+        host=_as_str(
+            _field(dashboard_raw, "ui.dashboard", "host"),
+            "ui.dashboard.host",
+        ),
+        port=_as_int(
+            _field(dashboard_raw, "ui.dashboard", "port"),
+            "ui.dashboard.port",
+            minimum=1,
+            maximum=65535,
+        ),
+        auto_open_browser=_as_bool(
+            _field(dashboard_raw, "ui.dashboard", "auto_open_browser"),
+            "ui.dashboard.auto_open_browser",
+        ),
+        keep_alive_on_error=_as_bool(
+            _field(dashboard_raw, "ui.dashboard", "keep_alive_on_error"),
+            "ui.dashboard.keep_alive_on_error",
+        ),
+        stream_fps=_as_int(
+            _field(dashboard_raw, "ui.dashboard", "stream_fps"),
+            "ui.dashboard.stream_fps",
+            minimum=1,
+            maximum=60,
+        ),
+        jpeg_quality=_as_int(
+            _field(dashboard_raw, "ui.dashboard", "jpeg_quality"),
+            "ui.dashboard.jpeg_quality",
+            minimum=1,
+            maximum=100,
+        ),
+        max_stream_width=_as_int(
+            _field(dashboard_raw, "ui.dashboard", "max_stream_width"),
+            "ui.dashboard.max_stream_width",
+            minimum=320,
+            maximum=3840,
+        ),
+        log_history=_as_int(
+            _field(dashboard_raw, "ui.dashboard", "log_history"),
+            "ui.dashboard.log_history",
+            minimum=20,
+            maximum=5000,
+        ),
+    )
+
     debug = _as_mapping(_field(section, "ui", "debug_window"), "ui.debug_window")
     return UiConfig(
+        dashboard=dashboard,
         debug_window=DebugWindowConfig(
             title=_as_str(
                 _field(debug, "ui.debug_window", "title"),
@@ -235,11 +302,19 @@ def _as_mapping(value: Any, name: str) -> Mapping[str, Any]:
     return value
 
 
-def _as_int(value: Any, name: str, *, minimum: int | None = None) -> int:
+def _as_int(
+    value: Any,
+    name: str,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ConfigError(f"{name} 必须是整数，实际为 {value!r}")
     if minimum is not None and value < minimum:
         raise ConfigError(f"{name} 不能小于 {minimum}，实际为 {value}")
+    if maximum is not None and value > maximum:
+        raise ConfigError(f"{name} 不能大于 {maximum}，实际为 {value}")
     return value
 
 
@@ -264,6 +339,12 @@ def _as_str(value: Any, name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ConfigError(f"{name} 必须是非空字符串，实际为 {value!r}")
     return value.strip()
+
+
+def _as_bool(value: Any, name: str) -> bool:
+    if not isinstance(value, bool):
+        raise ConfigError(f"{name} 必须是 true 或 false，实际为 {value!r}")
+    return value
 
 
 def _as_color(value: Any, name: str) -> tuple[int, int, int]:

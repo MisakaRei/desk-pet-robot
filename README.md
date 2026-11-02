@@ -1,6 +1,6 @@
 # 桌面宠物机器人
 
-这是一个先跑通软件、再逐步落到三块板子上的桌面宠物机器人项目。第一阶段在 Windows 11 上使用普通摄像头和窗口，验证“看见目标 → 判断方位与距离 → 状态机决策 → 眼睛表情 → 串口指令”的完整链路；代码保持跨平台，后续可直接迁移到 Linux ARM。
+这是一个先跑通软件、再逐步落到三块板子上的桌面宠物机器人项目。第一阶段在 Windows 11 上使用普通摄像头和窗口，验证“看见目标 → 判断方位与距离 → 状态机决策 → 眼睛表情 → 串口指令”的完整链路；代码保持跨平台，后续可直接迁移到 Linux ARM。项目还提供一个本地浏览器调试台，用来同时观察视觉画面、空间仿真、状态和日志。
 
 作者：敕仞
 
@@ -33,6 +33,7 @@ desk-pet-robot/
 ├── README.md
 ├── .gitignore
 ├── pyproject.toml
+├── start.bat                 # Windows 一键启动器
 ├── config/
 │   └── default.yaml          # 所有阈值、模型路径、摄像头与串口参数
 ├── models/                   # 模型权重，不进仓库
@@ -55,7 +56,12 @@ desk-pet-robot/
 │   │   ├── serial_link.py    # pyserial 收发与 VID/PID 查找
 │   │   └── loopback.py       # 无硬件时的 dry-run 输出
 │   └── ui/
-│       └── debug_window.py   # 叠加检测框的调试窗口
+│       ├── dashboard.py      # 本地 HTTP 调试台、运行快照与日志
+│       ├── debug_window.py   # 叠加检测框的原生调试窗口
+│       └── web/              # 调试控制台页面（HTML/CSS/JS）
+│           ├── index.html
+│           ├── dashboard.css
+│           └── dashboard.js
 ├── tools/
 │   └── sim_base.py           # 第二阶段：二维差速底盘仿真
 └── tests/
@@ -76,17 +82,44 @@ python -m pip install -e ".[test]"
 
 迁移到 Linux ARM 时同样创建 venv，改用 `source .venv/bin/activate` 即可。项目中的路径使用 `pathlib` 处理，不依赖 Windows 路径分隔符。
 
+## 双击启动（Windows）
+
+直接双击项目根目录的 `start.bat`。脚本会：
+
+- 检查 `.venv`，不存在时用 Python 3.12 创建并安装依赖；
+- 启动 `python -m petbot.main`；
+- 自动打开浏览器调试台：`http://127.0.0.1:8765/`；
+- 保留命令行窗口用于日志和按 Ctrl+C 退出。
+
+浏览器页面关闭不会结束程序；要停止项目，请点页面右上角“停止服务”，或在命令行窗口按 Ctrl+C。调试台只监听 `127.0.0.1`，不会暴露到局域网。
+
 ## 运行
 
-阶段 2 已接通摄像头、人和猫的 YOLO 检测以及调试窗口。准备权重后运行：
+阶段 2 已接通摄像头、人和猫的 YOLO 检测以及调试窗口。准备权重后也可以直接运行：
 
 ```powershell
 python -m petbot.main
 ```
 
-程序会自动探测摄像头，打开 `PetBot - Vision Debug` 窗口并叠加检测框；关闭窗口或按 Esc 即正常退出。当前尚未接入表情窗口，阶段 4 会加入。
+程序会自动探测摄像头，打开原生 `PetBot - Vision Debug` 窗口和浏览器调试台。摄像头正常时，两边都会显示带检测框的画面；关闭原生窗口或按 Esc 会停止整个程序。
 
-权重不进入仓库：把 `yolo11n.pt` 放进 `models/` 即可，默认路径是 `models/yolo11n.pt`，也可以在 `config/default.yaml` 的 `detector.model_path` 中修改。没有可用摄像头时，程序会打印“未找到可用摄像头”和尝试过的索引，退出码为 1，不会静默失败。
+没有可用摄像头时，程序会在命令行和页面同时显示“未找到可用摄像头”及尝试过的索引，并保持调试台运行，方便查看错误与日志；点击“停止服务”或按 Ctrl+C 退出，不会静默失败。
+
+当前尚未接入表情窗口，阶段 4 会加入。
+
+权重不进入仓库：把 `yolo11n.pt` 放进 `models/` 即可，默认路径是 `models/yolo11n.pt`，也可以在 `config/default.yaml` 的 `detector.model_path` 中修改。
+
+## 调试控制台
+
+调用 `python -m petbot.main` 后访问 `http://127.0.0.1:8765/`，页面包含：
+
+- 视觉调试：通过 MJPEG 显示摄像头画面和检测框；
+- 空间仿真：以机器人为中心显示目标方位角、粗估距离和雷达扫描，未接入实时目标时可用“演示轨迹”查看交互效果；
+- 状态机与目标：显示 IDLE / WATCH / APPROACH / BACKOFF 和当前目标信息；
+- 实时日志：把 Python logging 同步到浏览器，支持清屏；
+- 串口通信：dry-run 帧数与十六进制内容，阶段 5 接入后填充。
+
+页面使用 Python 标准库 `http.server` 和原生 HTML/CSS/JS 实现，不引入 Flask、FastAPI 或前端框架。页面和推流参数在 `config/default.yaml` 的 `ui.dashboard` 中配置。
 
 ## 配置
 
@@ -109,6 +142,7 @@ python -m petbot.main
 
 - [x] 阶段 1：仓库骨架、README、依赖与默认配置
 - [x] 阶段 2：摄像头采集、YOLO 检测与调试窗口
+- [x] 阶段 2 补充：可视化调试台、日志面板与一键启动
 - [ ] 阶段 3：方位角、距离估算与状态机
 - [ ] 阶段 4：表情渲染与眼睛行为
 - [ ] 阶段 5：串口协议、dry-run 与单元测试

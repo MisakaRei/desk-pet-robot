@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Desk Pet Robot · 调试控制台</title>
+  <link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <span></span><span></span>
+        </div>
+        <div>
+          <div class="brand-kicker">DESK PET ROBOT / STAGE 01</div>
+          <h1>调试控制台</h1>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="connection">
+          <span id="connectionDot" class="status-dot offline"></span>
+          <span id="connectionText">连接中</span>
+        </div>
+        <span id="modePill" class="pill pill-muted">STARTING</span>
+        <span class="top-stat"><b id="uptime">00:00</b> 运行</span>
+        <span class="top-stat"><b id="fps">0.0</b> FPS</span>
+        <button id="stopButton" class="button danger" type="button">停止服务</button>
+      </div>
+    </header>
+
+    <section class="vitals" aria-label="运行概况">
+      <article class="vital">
+        <div class="vital-head"><span>摄像头</span><span id="cameraLed" class="mini-led"></span></div>
+        <strong id="cameraVital">初始化中</strong>
+        <small id="cameraVitalSub">等待自动探测</small>
+      </article>
+      <article class="vital">
+        <div class="vital-head"><span>目标检测</span><span id="detectorLed" class="mini-led"></span></div>
+        <strong id="detectorVital">初始化中</strong>
+        <small id="detectorVitalSub">YOLO</small>
+      </article>
+      <article class="vital">
+        <div class="vital-head"><span>行为状态</span><span class="mini-led cyan"></span></div>
+        <strong id="stateVital">IDLE</strong>
+        <small id="stateVitalSub">待机</small>
+      </article>
+      <article class="vital">
+        <div class="vital-head"><span>串口</span><span id="serialLed" class="mini-led"></span></div>
+        <strong id="serialVital">待接入</strong>
+        <small id="serialVitalSub">dry-run · 阶段 5</small>
+      </article>
+    </section>
+
+    <main class="dashboard">
+      <section class="panel vision">
+        <header class="panel-head">
+          <div>
+            <span class="eyebrow">VISION / DEBUG</span>
+            <h2>视觉调试</h2>
+          </div>
+          <div class="panel-meta">
+            <span id="visionSource">摄像头 —</span>
+            <span id="detectionCount">0 个目标</span>
+          </div>
+        </header>
+        <div id="visionStage" class="vision-stage empty">
+          <img id="visionStream" alt="摄像头实时画面与检测框">
+          <div id="noSignal" class="no-signal">
+            <div class="no-signal-icon" aria-hidden="true">
+              <svg viewBox="0 0 64 64" role="img">
+                <rect x="8" y="16" width="48" height="32" rx="7"></rect>
+                <circle cx="32" cy="32" r="9"></circle>
+                <path d="M12 52 52 12"></path>
+              </svg>
+            </div>
+            <p class="no-signal-title">摄像头未连接</p>
+            <p id="cameraError" class="no-signal-copy">正在初始化采集设备…</p>
+            <p class="no-signal-hint">接入 USB 摄像头后重新启动项目即可看到实时画面</p>
+          </div>
+          <div class="vision-scanline" aria-hidden="true"></div>
+          <span id="visionBadge" class="stage-badge">NO SIGNAL</span>
+        </div>
+        <footer class="panel-foot vision-foot">
+          <span>分辨率 <b id="resolutionValue">—</b></span>
+          <span>设备索引 <b id="cameraIndexValue">—</b></span>
+          <span>模型 <b id="modelValue">—</b></span>
+          <span>推理设备 <b id="deviceValue">—</b></span>
+        </footer>
+      </section>
+
+      <section class="panel state-panel">
+        <header class="panel-head">
+          <div>
+            <span class="eyebrow">BEHAVIOR / FSM</span>
+            <h2>状态机</h2>
+          </div>
+          <span class="tiny-note">实时</span>
+        </header>
+        <div class="state-hero">
+          <div>
+            <div id="stateName" class="state-name">IDLE</div>
+            <div id="stateLabel" class="state-label">待机</div>
+          </div>
+          <div id="stateOrb" class="state-orb idle"></div>
+        </div>
+        <div id="stateChips" class="state-chips">
+          <span data-state="IDLE" class="state-chip active">IDLE</span>
+          <span data-state="WATCH" class="state-chip">WATCH</span>
+          <span data-state="APPROACH" class="state-chip">APPROACH</span>
+          <span data-state="BACKOFF" class="state-chip">BACKOFF</span>
+        </div>
+        <p id="behaviorNote" class="behavior-note">状态机在阶段 3 接入；当前页面显示待机。</p>
+        <div class="target-grid">
+          <div><span>目标</span><b id="targetKind">—</b></div>
+          <div><span>置信度</span><b id="targetConfidence">—</b></div>
+          <div><span>方位角</span><b id="targetBearing">—</b></div>
+          <div><span>粗估距离</span><b id="targetDistance">—</b></div>
+        </div>
+      </section>
+
+      <section class="panel sim-panel">
+        <header class="panel-head">
+          <div>
+            <span class="eyebrow">SPATIAL / SIM</span>
+            <h2>空间仿真</h2>
+          </div>
+          <label class="switch-label">
+            <input id="demoToggle" type="checkbox" checked>
+            <span>演示轨迹</span>
+          </label>
+        </header>
+        <div class="sim-stage">
+          <canvas id="simCanvas"></canvas>
+          <span id="demoBadge" class="stage-badge demo">DEMO</span>
+        </div>
+        <p class="sim-caption">蓝色为目标、青色为机器人；雷达场用于直观查看方位与距离。演示轨迹只影响本面板，不参与控制。</p>
+      </section>
+
+      <section class="panel logs">
+        <header class="panel-head">
+          <div>
+            <span class="eyebrow">SYSTEM / STDOUT</span>
+            <h2>实时日志</h2>
+          </div>
+          <div class="panel-actions">
+            <span id="logCount" class="tiny-note">0 行</span>
+            <button id="clearLogs" class="button ghost" type="button">清空</button>
+          </div>
+        </header>
+        <div id="logList" class="log-list" role="log" aria-live="polite">
+          <div class="log-empty">等待程序输出…</div>
+        </div>
+        <footer class="panel-foot">
+          <span>日志通过本地 HTTP 轮询更新</span>
+          <span class="mono">127.0.0.1</span>
+        </footer>
+      </section>
+
+      <section class="panel comm-panel">
+        <header class="panel-head">
+          <div>
+            <span class="eyebrow">LINK / ESP32</span>
+            <h2>串口通信</h2>
+          </div>
+          <span id="serialMode" class="pill pill-muted">PENDING</span>
+        </header>
+        <div class="comm-grid">
+          <div class="comm-state">
+            <span>发送帧数</span>
+            <strong id="serialSent">0</strong>
+          </div>
+          <div class="comm-state">
+            <span>链路</span>
+            <strong id="serialLink">未接入</strong>
+          </div>
+        </div>
+        <div class="hex-label">最近一帧</div>
+        <pre id="lastFrame" class="hex-frame">尚无串口帧
+串口协议与 dry-run 在阶段 5 接入。</pre>
+      </section>
+    </main>
+
+    <footer class="page-foot">
+      <span>Desk Pet Robot · Phase 1</span>
+      <span>本地调试服务 · 仅监听回环地址</span>
+      <span id="versionText" class="mono">v0.1.0</span>
+    </footer>
+  </div>
+
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>

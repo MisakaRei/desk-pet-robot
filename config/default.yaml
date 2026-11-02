@@ -59,6 +59,19 @@ face:
     blink_duration_s: 0.16
 
 ui:
+  dashboard:
+    enabled: true
+    # 只监听回环地址，调试页面不会暴露到局域网
+    host: "127.0.0.1"
+    port: 8765
+    auto_open_browser: true
+    # 摄像头或模型启动失败时保留页面，方便在浏览器里查看错误和日志
+    keep_alive_on_error: true
+    # 浏览器端的 MJPEG 帧率和 JPEG 质量；降低这些值可减轻 Linux ARM 的编码负担
+    stream_fps: 12
+    jpeg_quality: 80
+    max_stream_width: 960
+    log_history: 400
   debug_window:
     # 先用英文标题，避免 OpenCV 在高 DPI Windows 下对中文窗口名编码不稳定
     title: "PetBot - Vision Debug"
