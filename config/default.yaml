@@ -1,0 +1,76 @@
+# 桌面宠物机器人默认配置
+# 作者：敕仞
+# 所有阈值、模型路径、摄像头索引和串口参数集中在这里，源码中不写魔法数字。
+# 本阶段在 PC 上验证，后续迁移 Linux ARM 时只改配置和硬件访问层。
+
+camera:
+  # null 表示从 0 开始自动探测；需要固定设备时再填具体索引
+  preferred_index: null
+  probe_max_index: 4
+  width: 1280
+  height: 720
+  fps: 30
+
+detector:
+  model_path: models/yolo11n.pt
+  image_size: 640
+  confidence_threshold: 0.45
+  iou_threshold: 0.5
+  device: cpu
+  # COCO 类别编号：0 人，15 猫
+  target_classes:
+    person: 0
+    cat: 15
+
+tracking:
+  # 两帧检测框 IoU 高于此值才视为同一目标
+  match_iou_threshold: 0.30
+  # 方位角与距离的低通平滑系数，越小越稳但跟随越慢
+  smoothing_alpha: 0.60
+  # 距离粗估的假设：用摄像头水平视场角换算像素焦距，
+  # 再按“焦距 × 假设身高 ÷ 目标框高”估算。没有深度信息，仅用于行为决策。
+  horizontal_fov_deg: 60.0
+  assumed_height_m:
+    person: 1.70
+    cat: 0.25
+
+brain:
+  # 以人为互动目标；猫仍会被检测并显示
+  target_kind: person
+  # 大于该距离尝试靠近，小于后退距离则后退；中间区域保持 WATCH
+  approach_distance_m: 1.50
+  backoff_distance_m: 0.80
+  # 目标连续消失超过该时长回到 IDLE
+  lost_timeout_s: 3.0
+
+face:
+  width: 240
+  height: 280
+  fps: 30
+  eye:
+    spacing_px: 86
+    radius_px: 38
+    pupil_radius_px: 16
+    max_look_offset_px: 14
+    follow_smoothing: 0.22
+    blink_min_interval_s: 2.0
+    blink_max_interval_s: 6.0
+    blink_duration_s: 0.16
+
+serial:
+  # 默认无硬件调试，只打印帧；接上真设备后改为 false
+  dry_run: true
+  baudrate: 115200
+  write_timeout_s: 0.05
+  read_timeout_s: 0.05
+  # 不写死 COM 号；按 VID/PID 顺序匹配常见的 ESP32 原生 USB 与 USB 转串口芯片。
+  # 硬件确定后可按实际值替换或调整顺序。
+  vid_pid_candidates:
+    - vid: 0x303A
+      pid: 0x1001
+    - vid: 0x1A86
+      pid: 0x7523
+    - vid: 0x10C4
+      pid: 0xEA60
+  # 状态回报帧的发送周期
+  status_period_s: 0.5

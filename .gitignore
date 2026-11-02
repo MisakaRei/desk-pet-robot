@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 模型权重：只保留目录占位，不把大文件提交进仓库
+models/*
+!models/.gitkeep
+*.pt
+*.onnx
+*.engine
+*.torchscript
+
+# 运行产物
+logs/
+*.log
+
+# 编辑器与系统文件
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
