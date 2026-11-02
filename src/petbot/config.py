@@ -48,6 +48,29 @@ class DetectorConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class TrackingConfig:
+    match_iou_threshold: float
+    max_lost_s: float
+    smoothing_alpha: float
+    horizontal_fov_deg: float
+    assumed_height_m: Mapping[str, float]
+
+
+@dataclass(frozen=True, slots=True)
+class BrainConfig:
+    target_kind: str
+    approach_distance_m: float
+    backoff_distance_m: float
+    lost_timeout_s: float
+    approach_speed_mps: float
+    backoff_speed_mps: float
+    turn_gain: float
+    max_turn_rate_rad_s: float
+    turn_deadband_deg: float
+    gimbal_limit_deg: float
+
+
+@dataclass(frozen=True, slots=True)
 class DebugWindowConfig:
     title: str
     wait_key_ms: int
@@ -83,6 +106,8 @@ class UiConfig:
 class AppConfig:
     camera: CameraConfig
     detector: DetectorConfig
+    tracking: TrackingConfig
+    brain: BrainConfig
     ui: UiConfig
 
 
@@ -104,9 +129,17 @@ def load_config(path: str | Path | None = None) -> AppConfig:
 
     camera = _parse_camera(_as_section(raw, "camera"))
     detector = _parse_detector(_as_section(raw, "detector"))
+    tracking = _parse_tracking(_as_section(raw, "tracking"))
+    brain = _parse_brain(_as_section(raw, "brain"))
     ui = _parse_ui(_as_section(raw, "ui"))
 
-    return AppConfig(camera=camera, detector=detector, ui=ui)
+    return AppConfig(
+        camera=camera,
+        detector=detector,
+        tracking=tracking,
+        brain=brain,
+        ui=ui,
+    )
 
 
 def _parse_camera(section: Mapping[str, Any]) -> CameraConfig:
@@ -179,6 +212,125 @@ def _parse_detector(section: Mapping[str, Any]) -> DetectorConfig:
         ),
         device=_as_str(_field(section, "detector", "device"), "detector.device"),
         target_classes=MappingProxyType(targets),
+    )
+
+
+def _parse_tracking(section: Mapping[str, Any]) -> TrackingConfig:
+    heights_raw = _as_mapping(
+        _field(section, "tracking", "assumed_height_m"),
+        "tracking.assumed_height_m",
+    )
+    heights: dict[str, float] = {}
+    for kind, height in heights_raw.items():
+        if kind not in SUPPORTED_KINDS:
+            raise ConfigError(
+                f"tracking.assumed_height_m 含未知类别：{kind!r}"
+            )
+        heights[kind] = _as_float(
+            height,
+            f"tracking.assumed_height_m.{kind}",
+            minimum=0.05,
+        )
+
+    missing = set(SUPPORTED_KINDS) - set(heights)
+    if missing:
+        raise ConfigError(
+            "tracking.assumed_height_m 缺少类别：" + "、".join(sorted(missing))
+        )
+
+    return TrackingConfig(
+        match_iou_threshold=_as_float(
+            _field(section, "tracking", "match_iou_threshold"),
+            "tracking.match_iou_threshold",
+            minimum=0.0,
+            maximum=1.0,
+        ),
+        max_lost_s=_as_float(
+            _field(section, "tracking", "max_lost_s"),
+            "tracking.max_lost_s",
+            minimum=0.0,
+        ),
+        smoothing_alpha=_as_float(
+            _field(section, "tracking", "smoothing_alpha"),
+            "tracking.smoothing_alpha",
+            minimum=0.0,
+            maximum=1.0,
+        ),
+        horizontal_fov_deg=_as_float(
+            _field(section, "tracking", "horizontal_fov_deg"),
+            "tracking.horizontal_fov_deg",
+            minimum=1.0,
+            maximum=179.0,
+        ),
+        assumed_height_m=MappingProxyType(heights),
+    )
+
+
+def _parse_brain(section: Mapping[str, Any]) -> BrainConfig:
+    target_kind = _as_str(
+        _field(section, "brain", "target_kind"), "brain.target_kind"
+    )
+    if target_kind not in SUPPORTED_KINDS:
+        raise ConfigError(
+            f"brain.target_kind 必须是 {'、'.join(SUPPORTED_KINDS)}，实际为 {target_kind!r}"
+        )
+
+    backoff = _as_float(
+        _field(section, "brain", "backoff_distance_m"),
+        "brain.backoff_distance_m",
+        minimum=0.0,
+    )
+    approach = _as_float(
+        _field(section, "brain", "approach_distance_m"),
+        "brain.approach_distance_m",
+        minimum=0.0,
+    )
+    if backoff >= approach:
+        raise ConfigError(
+            "brain.backoff_distance_m 必须小于 brain.approach_distance_m，"
+            "否则状态机会在同一个距离上反复切换"
+        )
+
+    return BrainConfig(
+        target_kind=target_kind,
+        approach_distance_m=approach,
+        backoff_distance_m=backoff,
+        lost_timeout_s=_as_float(
+            _field(section, "brain", "lost_timeout_s"),
+            "brain.lost_timeout_s",
+            minimum=0.1,
+        ),
+        approach_speed_mps=_as_float(
+            _field(section, "brain", "approach_speed_mps"),
+            "brain.approach_speed_mps",
+            minimum=0.0,
+        ),
+        backoff_speed_mps=_as_float(
+            _field(section, "brain", "backoff_speed_mps"),
+            "brain.backoff_speed_mps",
+            minimum=0.0,
+        ),
+        turn_gain=_as_float(
+            _field(section, "brain", "turn_gain"),
+            "brain.turn_gain",
+            minimum=0.0,
+        ),
+        max_turn_rate_rad_s=_as_float(
+            _field(section, "brain", "max_turn_rate_rad_s"),
+            "brain.max_turn_rate_rad_s",
+            minimum=0.1,
+        ),
+        turn_deadband_deg=_as_float(
+            _field(section, "brain", "turn_deadband_deg"),
+            "brain.turn_deadband_deg",
+            minimum=0.0,
+        ),
+        gimbal_limit_deg=_as_float(
+            _field(section, "brain", "gimbal_limit_deg"),
+            "brain.gimbal_limit_deg",
+            minimum=0.0,
+            maximum=90.0,
+        ),
     )
 
 

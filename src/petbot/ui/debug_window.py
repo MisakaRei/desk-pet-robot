@@ -42,6 +42,10 @@ class DebugWindow:
             )
 
             label = f"{detection.kind} {detection.conf:.2f}"
+            if detection.bearing_deg is not None:
+                label += f" {detection.bearing_deg:+.0f}°"
+            if detection.distance_m is not None:
+                label += f" {detection.distance_m:.1f}m"
             (text_width, text_height), _baseline = cv2.getTextSize(
                 label,
                 cv2.FONT_HERSHEY_SIMPLEX,

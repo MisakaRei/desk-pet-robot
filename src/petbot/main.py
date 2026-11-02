@@ -1,20 +1,24 @@
-"""程序入口：组装配置、视觉链路和 Web 调试控制台。
+"""程序入口：组装配置、视觉链路、状态机和 Web 调试控制台。
 
-第一阶段这一步负责把采集/检测、浏览器可视化与生命周期放在同一个进程里。
-状态机、表情窗口和串口会在后续里程碑接入，入口继续复用这里的启动和清理顺序。
+第一阶段把采集/检测、跟踪、状态决策、浏览器可视化与生命周期放在同一个
+进程里。表情窗口和串口会在后续里程碑接入，入口继续复用这里的启动和清理顺序。
 作者：敕仞
 """
 
 from __future__ import annotations
 
 import logging
+import time
 
 from petbot import PetBotError
+from petbot.brain.behaviors import build_behavior
+from petbot.brain.state_machine import StateMachine, select_primary_target
 from petbot.config import AppConfig, DEFAULT_CONFIG_PATH, load_config
 from petbot.ui.dashboard import Dashboard
 from petbot.ui.debug_window import DebugWindow
 from petbot.vision.camera import Camera, CameraError
 from petbot.vision.detector import Detector, DetectorError
+from petbot.vision.tracker import Tracker
 
 LOGGER = logging.getLogger("petbot.main")
 
@@ -118,6 +122,9 @@ def _run(config: AppConfig, dashboard: Dashboard | None) -> int:
             )
             state.set_app_mode("live")
 
+        tracker = Tracker(config.tracking)
+        state_machine = StateMachine(config.brain)
+
         with DebugWindow(config.ui.debug_window) as window:
             LOGGER.info("视觉链路已启动；关闭调试窗口或按 Esc 退出。")
             while True:
@@ -126,11 +133,39 @@ def _run(config: AppConfig, dashboard: Dashboard | None) -> int:
                     break
 
                 frame = camera.read()
-                detections = detector.detect(frame)
-                rendered = window.render(frame, detections)
+                raw_detections = detector.detect(frame)
+                tracked = tracker.update(
+                    raw_detections,
+                    frame_width=frame.shape[1],
+                )
+
+                now = time.monotonic()
+                target = select_primary_target(
+                    tracked, config.brain.target_kind
+                )
+                previous_state = state_machine.state
+                current_state = state_machine.update(target, now)
+                if current_state is not previous_state:
+                    LOGGER.info(
+                        "行为状态切换：%s → %s",
+                        previous_state.value,
+                        current_state.value,
+                    )
+
+                behavior = build_behavior(
+                    current_state,
+                    state_machine.last_target,
+                    config.brain,
+                )
+                rendered = window.render(frame, tracked)
 
                 if state is not None:
-                    state.publish_frame(rendered, detections)
+                    state.publish_frame(rendered, tracked)
+                    state.update_behavior(
+                        current_state.value,
+                        target=behavior.target,
+                        available=True,
+                    )
 
                 if not window.show_rendered(rendered):
                     LOGGER.info("调试窗口已关闭或按下 Esc，退出。")

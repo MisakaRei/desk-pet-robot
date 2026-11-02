@@ -135,25 +135,7 @@ class DashboardState:
         detections: Sequence[Detection],
     ) -> None:
         """保存已画框的画面和本帧检测结果，供页面轮询/取流。"""
-        items = [
-            {
-                "kind": detection.kind,
-                "bbox": list(detection.bbox),
-                "conf": round(detection.conf, 3),
-                "bearing_deg": (
-                    None
-                    if detection.bearing_deg is None
-                    else round(detection.bearing_deg, 1)
-                ),
-                "distance_m": (
-                    None
-                    if detection.distance_m is None
-                    else round(detection.distance_m, 2)
-                ),
-                "ts": detection.ts,
-            }
-            for detection in detections
-        ]
+        items = [_detection_payload(detection) for detection in detections]
         with self._lock:
             # 调用方传入的是 debug_window.render() 生成的新帧，不会再被原地修改。
             self._frame = frame
@@ -166,7 +148,7 @@ class DashboardState:
         self,
         state: str,
         *,
-        target: dict[str, Any] | None = None,
+        target: Detection | None = None,
         available: bool = True,
     ) -> None:
         with self._lock:
@@ -174,7 +156,9 @@ class DashboardState:
                 "available": available,
                 "state": state,
                 "since": time.time(),
-                "target": target,
+                "target": (
+                    None if target is None else _detection_payload(target)
+                ),
             }
 
     def update_serial(
@@ -505,6 +489,25 @@ class _DashboardRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(payload)
         self.wfile.write(b"\r\n")
         self.wfile.flush()
+
+
+def _detection_payload(detection: Detection) -> dict[str, Any]:
+    return {
+        "kind": detection.kind,
+        "bbox": list(detection.bbox),
+        "conf": round(detection.conf, 3),
+        "bearing_deg": (
+            None
+            if detection.bearing_deg is None
+            else round(detection.bearing_deg, 1)
+        ),
+        "distance_m": (
+            None
+            if detection.distance_m is None
+            else round(detection.distance_m, 2)
+        ),
+        "ts": detection.ts,
+    }
 
 
 def _parse_after(query: dict[str, list[str]]) -> int:

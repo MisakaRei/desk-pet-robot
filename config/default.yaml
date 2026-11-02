@@ -28,6 +28,8 @@ tracking:
   match_iou_threshold: 0.30
   # 方位角与距离的低通平滑系数，越小越稳但跟随越慢
   smoothing_alpha: 0.60
+  # 检测短暂漏帧时保留跟踪轨迹的时间；状态机的 3 秒超时是另一层逻辑
+  max_lost_s: 0.50
   # 距离粗估的假设：用摄像头水平视场角换算像素焦距，
   # 再按“焦距 × 假设身高 ÷ 目标框高”估算。没有深度信息，仅用于行为决策。
   horizontal_fov_deg: 60.0
@@ -43,6 +45,15 @@ brain:
   backoff_distance_m: 0.80
   # 目标连续消失超过该时长回到 IDLE
   lost_timeout_s: 3.0
+  # 尚未接底盘时先给出期望速度，阶段 5 再通过串口 dry-run 发出
+  approach_speed_mps: 0.15
+  backoff_speed_mps: 0.12
+  # 底盘的转向指令按目标方位角比例给出，并限制最大角速度
+  turn_gain: 1.50
+  max_turn_rate_rad_s: 0.80
+  turn_deadband_deg: 2.0
+  # 云台转角限制只是一个保守的初始值，接实物后按机械行程调整
+  gimbal_limit_deg: 60.0
 
 face:
   width: 240

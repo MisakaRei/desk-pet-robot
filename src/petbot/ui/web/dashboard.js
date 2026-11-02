@@ -72,6 +72,7 @@
     liveTarget: null,
     heading: 0,
     lastTime: performance.now(),
+    cameraConnected: false,
   };
 
   const counters = {
@@ -152,6 +153,7 @@
     const connected = camera.state === "connected";
     const failed = camera.state === "error";
     const starting = camera.state === "starting";
+    sim.cameraConnected = connected;
 
     setText(ui.cameraVital, connected ? "已连接" : failed ? "不可用" : "探测中");
     setText(
@@ -244,14 +246,17 @@
 
     if (!behavior.available) {
       ui.behaviorNote.style.display = "";
-      setText(ui.behaviorNote, "状态机在阶段 3 接入；当前仅展示视觉检测。");
+      setText(ui.behaviorNote, "状态机尚未启动；当前仅展示视觉检测。");
     } else {
-      ui.behaviorNote.style.display = "none";
+      ui.behaviorNote.style.display = "";
+      setText(ui.behaviorNote, "目标连续丢失 3 秒后回到 IDLE。");
     }
 
     if (!sim.touched) {
-      ui.demoToggle.checked = !target;
-      sim.demo = ui.demoToggle.checked;
+      // 只有没接摄像头时默认播放演示轨迹；实机运行时避免展示假目标。
+      const useDemo = !sim.cameraConnected && !target;
+      ui.demoToggle.checked = useDemo;
+      sim.demo = useDemo;
     }
   }
 
